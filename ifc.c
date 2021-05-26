@@ -33,7 +33,7 @@ int main()
 	char p[128];
 	for (int i = 0; i < ifc.ifc_len / sizeof(struct ifreq); ++i) {
 		printf("%s\n", ifr[i].ifr_name);
-		printf("%s\n", ntop(&ifr[i].ifr_addr, p, sizeof(p), NULL));
+		printf("%s\n", ntop(&ifr[i].ifr_addr, p, sizeof(p)));
 	}
 
 	free(ifc.ifc_buf);

@@ -20,10 +20,11 @@ public:
 
   void bind(const string &path) {
     sockaddr_un sun = {AF_LOCAL};
-    auto n = snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", path.c_str());
+    auto n = snprintf(sun.sun_path, sizeof(sun.sun_path), "@%s", path.c_str());
     assert(n > 0 && n < sizeof(sun.sun_path));
-    unlink(sun.sun_path);
-    if (::bind(_fd, (sockaddr *)&sun, sizeof(sun)) < 0) {
+    socklen_t len = SUN_LEN(&sun);
+    sun.sun_path[0] = 0;
+    if (::bind(_fd, (sockaddr *)&sun, len) < 0) {
       perror("bind");
       assert(0);
     }
@@ -31,9 +32,10 @@ public:
 
   void send(const string &msg, const string &to) {
     sockaddr_un sun = {AF_LOCAL};
-    snprintf(sun.sun_path, sizeof(sun.sun_path), "%s", to.c_str());
-    auto n =
-        sendto(_fd, msg.c_str(), msg.size(), 0, (sockaddr *)&sun, sizeof(sun));
+    snprintf(sun.sun_path, sizeof(sun.sun_path), "@%s", to.c_str());
+    socklen_t len = SUN_LEN(&sun);
+    sun.sun_path[0] = 0;
+    auto n = sendto(_fd, msg.c_str(), msg.size(), 0, (sockaddr *)&sun, len);
     assert(n == msg.size());
   }
 
@@ -44,7 +46,7 @@ public:
     auto n = recvfrom(_fd, buf, sizeof(buf), 0, (sockaddr *)&sun, &len);
     assert(n > 0);
     msg.assign(buf, n);
-    from = sun.sun_path;
+    from = &sun.sun_path[1];
   }
 
 private:
@@ -98,8 +100,8 @@ private:
   string findPath(stringstream &ss) const {
     string name;
     ss >> name;
-    auto it = find_if(_names.begin(), _names.end(),
-                      [&name](const auto &a) { return a.second == name; });
+    auto it =
+        find_if(_names.begin(), _names.end(), [&name](const auto &a) { return a.second == name; });
     assert(it != _names.end());
     return it->first;
   }
@@ -130,9 +132,7 @@ public:
     return 0;
   }
 
-  void handle(size_t seq, stringstream &ss, const string &from) override {
-    _cb(seq, ss, from);
-  }
+  void handle(size_t seq, stringstream &ss, const string &from) override { _cb(seq, ss, from); }
 
 private:
   Callback _cb;
@@ -176,8 +176,7 @@ protected:
     assert(ret);
   }
 
-  void request(int req, const string &arg, const Callback &cb,
-               const string &to) {
+  void request(int req, const string &arg, const Callback &cb, const string &to) {
     auto cfm = req + 100;
     if (!_handlers[cfm])
       _handlers[cfm] = make_shared<Client>();
@@ -293,8 +292,6 @@ void fork(const function<void()> &proc) {
 }
 
 int main() {
-  unlink("log");
-
   NameServer ns;
   fork(bind(&NameServer::start, &ns));
 
